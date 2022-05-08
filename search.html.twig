@@ -1,0 +1,112 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Hello SearchController!{% endblock %}
+
+{% block body %}
+
+    <div id="searchApp">
+        <input type="text" placeholder="Search" id="query" name="query" v-on:input="debounceInput"/>
+
+        <div v-if="!nodata" class="search_bar scrollbar">
+            <div class="quick-search-wrap" v-on:scroll="scroll">
+                <table>
+                    <tr>
+                        <td>ID</td>
+                        <td>Product Name</td>
+                        <td>Image</td>
+                    </tr>
+                    <tr v-for="row in allData">
+                        <td>{% verbatim %}{{ row.id }}{% endverbatim %}</td>
+                        <td>{% verbatim %}{{ row.name }}{% endverbatim %}</td>
+                        <td>{% verbatim %}{{ row.image }}{% endverbatim %}</td>
+                        <button v-on:click="loadMore">Load More</button>
+                    </tr>
+                    <tr v-if="nodata">
+                        <td colspan="2">No Data Found</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+    <script>
+        var application = new Vue({
+            el: '#searchApp',
+            data: {
+                allData: [],
+                query: '',
+                nodata: true,
+                offset: 0,
+                lastScrollUpdate: 0
+            },
+            methods: {
+                loadMore() {
+                    application.offset += 12;
+                    const formData = new FormData();
+                    formData.append('query', application.query);
+                    formData.append('offset', application.offset);
+                    axios.post('/ajaxSearchVue', formData, {}).then(function (response) {
+                        if (response.data.length > 0) {
+                            thisLength = response.data.length;
+                            for (let i = 0; i < thisLength; i++) {
+                                application.allData.push(response.data[i]);
+                            }
+                            application.nodata = false;
+                        }
+                    });
+                },
+                debounceInput: _.debounce(function (e) {
+                    application.query = e.target.value;
+                    if (this.query.length > 2) {
+                        application.allData = [];
+                        const formData = new FormData();
+                        formData.append('query', application.query);
+                        axios.post('/ajaxSearch', formData, {}).then(function (response) {
+                            if (response.data.length > 0) {
+                                thisLength = response.data.length;
+                                for (let i = 0; i < thisLength; i++) {
+                                    application.allData.push(response.data[i]);
+                                }
+                                application.nodata = false;
+                            } else {
+                                application.allData = [];
+                                application.nodata = true;
+                                application.offset = 0;
+                            }
+                        });
+                    } else {
+                        application.allData = [];
+                        application.data = true;
+                    }
+                }, 1500),
+                scroll: function(e) {
+                    var scrollBar=e.target;
+                    if((scrollBar.scrollTop + scrollBar.clientHeight >= scrollBar.scrollHeight-20)){
+                        var t=new Date().getTime();
+                        if((t-this.lastScrollUpdate)>1000){
+                            this.lastScrollUpdate=t;
+                            console.log('reached end: '+scrollBar.scrollTop+' '+scrollBar.clientHeight+' '+scrollBar.scrollHeight);
+                            application.loadMore();
+                        }else{
+                            console.log("< 1 sec between scoll. no update");
+                        }
+                    }
+                }
+            },
+            // mounted: function() {
+            //     scroll(function(e) {
+            //         var scrollBar=e.target;
+            //         if((scrollBar.scrollTop + scrollBar.clientHeight >= scrollBar.scrollHeight-20)){
+            //             var t=new Date().getTime();
+            //             if((t-this.lastScrollUpdate)>3000){
+            //                 this.lastScrollUpdate=t;
+            //                 console.log('reached end: '+scrollBar.scrollTop+' '+scrollBar.clientHeight+' '+scrollBar.scrollHeight);
+            //                 //TODO: load more data
+            //             }else{
+            //                 console.log("< 3sec between scoll. no update");
+            //             }
+            //         }
+            //     })
+            // }
+        });
+    </script>
+{% endblock %}
