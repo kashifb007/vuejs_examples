@@ -1,0 +1,207 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Hello SearchController!{% endblock %}
+
+{% block body %}
+
+    <div id="searchApp" class="search">
+        <search-image-list></search-image-list>
+    </div>
+    <script>
+        Vue.component('search-image-list', {
+            template: `
+                <div class="search__container">
+                    <input type="text" placeholder="Search" id="query" name="query" v-on:input="debounceInput"
+                    v-on:click="show" class="search__input" />
+                    <div class="loading" v-if="loading"><img src="/image/loading.gif" alt="loading" title="loading" /></div>
+                    <div v-if="!nodata" class="search__results" v-bind:class="{active: isActive}" @focusout="hide" tabindex="-1" ref="focusMe">
+                        <div class="search__legend">
+                            <div class="search__display-mode">
+                                <a href="#" class="search__toggle-link link_mode_grid active" v-on:click="toggleDataMode('grid')" title="Grid View"><i class="fas fa-th"></i></a>
+                                <a href="#" class="search__toggle-link link_mode_list" v-on:click="toggleDataMode('list')" title="List View"><i class="fas fa-list"></i></a>
+                            </div>
+                            <div class="search__display-sort">
+                                <a href="#" class="search__toggle-link link_sort_relevance active" v-on:click="toggleDataSort('relevance')" title="Relevance"><i class="fas fa-redo"></i></a>
+                                <a href="#" class="search__toggle-link link_sort_asc" v-on:click="toggleDataSort('asc')" title="Price Asc"><i class="fas fa-chevron-up"></i></a>
+                                <a href="#" class="search__toggle-link link_sort_desc" v-on:click="toggleDataSort('desc')" title="Price Desc"><i class="fas fa-chevron-down"></i></a>
+                            </div>
+                        </div>
+                        <div class="search__wrapper" v-on:scroll="scroll" data-mode="grid">
+                            <div v-for="row in allData" class="search__results-item">
+                                <search-image
+                                v-bind:item_name="row.name"
+                                v-bind:item_desc="row.desc"
+                                v-bind:item_image="row.image"
+                                v-bind:item_price="row.price"
+                                ></search-image>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `,
+            data:() => ({
+                    allData: [],
+                    query: '',
+                    nodata: true,
+                    loading: false,
+                    offset: 0,
+                    lastScrollUpdate: 0,
+                    isActive: false,
+                    dataMode: 'grid',
+                    dataSort: 'relevance',
+
+            }),
+            mounted() {
+                this.$nextTick(() => this.$refs.focusMe.focus());
+                console.log('mounted');
+            },
+            computed: {
+            },
+            methods: {
+                search(params = {}) {
+                    this.allData = [];
+                    this.loading = true;
+                    const formData = new FormData();
+                    formData.append('query', this.query);
+                    formData.append('offset', this.offset);
+                    if (typeof params !== undefined && Object.keys(params).length > 0) {
+                        formData.append('sort', params["sort"]);
+                    }
+                    axios.post('/ajaxSearchVue', formData, {}).then((response) => {
+                        if (response.data.length > 0) {
+                            thisLength = response.data.length;
+                            for (let i = 0; i < thisLength; i++) {
+                                this.allData.push(response.data[i]);
+                            }
+                            this.isActive = true;
+                            this.nodata = false;
+                            this.loading = false;
+                        } else {
+                            this.loading = false;
+                            this.allData = [];
+                            this.nodata = true;
+                            this.offset = 0;
+                        }
+                    });
+                },
+                loadMore() {
+                    this.loading = true;
+                    this.offset += 12;
+                    const formData = new FormData();
+                    formData.append('query', this.query);
+                    formData.append('offset', this.offset);
+                    formData.append('sort', this.dataSort);
+                    axios.post('/ajaxSearchVue', formData, {}).then((response) => {
+                        if (response.data.length > 0) {
+                            thisLength = response.data.length;
+                            for (let i = 0; i < thisLength; i++) {
+                                this.allData.push(response.data[i]);
+                            }
+                            this.nodata = false;
+                            this.loading = false;
+                        }
+                    });
+                },
+                debounceInput: _.debounce(function (e) {
+                    this.query = e.target.value;
+                    if (this.query.length > 2) {
+                        this.search();
+                    } else {
+                        this.allData = [];
+                        this.nodata = true;
+                    }
+                }, 1500),
+                scroll: function (e) {
+                    var scrollBar = e.target;
+                    if ((scrollBar.scrollTop + scrollBar.clientHeight >= scrollBar.scrollHeight - 20)) {
+                        var t = new Date().getTime();
+                        if ((t - this.lastScrollUpdate) > 3000) {
+                            this.lastScrollUpdate = t;
+                            this.loadMore();
+                        }
+                    }
+                },
+                show: function () {
+                    this.isActive = true;
+                    this.$refs.focusMe.focus();
+                    console.log('show');
+                },
+                hide: function() {
+                    this.isActive = false;
+                    console.log('hide');
+                },
+                toggleDataMode: function(mode) {
+                    $('.search__wrapper').attr('data-mode', mode);
+                    if(mode === 'grid') {
+                        $('.link_mode_list').removeClass('active');
+                        $('.link_mode_grid').addClass('active');
+                    } else {
+                        $('.link_mode_list').addClass('active');
+                        $('.link_mode_grid').removeClass('active');
+                    }
+                    this.dataMode = mode;
+                },
+                toggleDataSort: function(sort) {
+                    this.dataSort = sort;
+                    var params = {};
+                    params["sort"] = sort;
+                    this.search(params);
+                    this.offset = 0;
+                    $('.link_sort_relevance').removeClass('active');
+                    $('.link_sort_asc').removeClass('active');
+                    $('.link_sort_desc').removeClass('active');
+                    if(sort === 'relevance') {
+                        $('.link_sort_relevance').addClass('active');
+                    }
+                    if(sort === 'asc') {
+                        $('.link_sort_asc').addClass('active');
+                    }
+                    if(sort === 'desc') {
+                        $('.link_sort_desc').addClass('active');
+                    }
+                },
+            },
+        });
+
+        Vue.component('search-image', {
+            template: `
+            <a href="#" class="search__link">
+                <div class="image__container">
+                    <img v-bind:src="'/image/' + item_image" class="search__image" />
+                </div>
+                <div class="search__copy">
+                    <span class="search__product_name" v-text="item_name"></span>
+                    <span class="search__product_desc" v-text="item_desc"></span>
+                </div>
+                <div class="search__product-card"><span class="product_label"><strong>Price</strong></span> <span class="product_price" v-text="'£' + item_price"></span></div>
+            </a>
+            `,
+            props: {
+                item_name: {
+                    type: String,
+                    default: '',
+                    required: true,
+                },
+                item_image: {
+                    type: String,
+                    default: '',
+                    required: true,
+                },
+                item_desc: {
+                    type: String,
+                    default: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut vitae pulvinar orci.',
+                    required: true,
+                },
+                item_price: {
+                    type: Number,
+                    default: 0,
+                    required: true,
+                },
+            },
+        });
+
+        var application = new Vue({
+            el: '#searchApp',
+        });
+    </script>
+{% endblock %}
